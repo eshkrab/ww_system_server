@@ -77,17 +77,16 @@ async def handle_brightness():
         logging.info('Received a POST request')
         form_data = await request.form
         brightness = float(form_data.get("brightness"))
-        logging.debug(f"Brightness from flutter: {brightness}")
-        brightness = int(brightness * 255.0)
+        brightness = int(brightness/100.0 * 255.0)
         reply = await send_message_to_player(f"set_brightness {brightness}")
         logging.debug(f"Brightness from player: {reply}")
-        return jsonify({"success": True, "brightness": brightness/255.0, "reply": reply})
+        return jsonify({"success": True, "reply": reply})
 
     if request.method == "GET":
         logging.info('Received a GET request')
         brightness = await send_message_to_player("get_brightness")
-        brightness = float(brightness) / 255.0
-        app.logger.debug(f"Brightness: {brightness}")
+        brightness = float(brightness) / 255.0  
+        app.logger.debug(f" GET Brightness response: {brightness}")
         return jsonify({"success": True, "brightness": brightness, "reply": brightness})
 
     return jsonify({"error": "Invalid request method"}), 405
