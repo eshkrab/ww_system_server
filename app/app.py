@@ -11,15 +11,10 @@ from werkzeug.utils import secure_filename
 import aiofiles
 import asyncio
 
-import json
 import logging
 
 app = Quart(__name__)
-app.debug = True
 app = cors(app, allow_origin="*")
-
-video_dir = "content/"
-ws_queue = Queue(maxsize=10)
 
 # Configuring logging
 logging.basicConfig(level=logging.DEBUG)
@@ -34,38 +29,37 @@ config = load_config('config/config.json')
 ALLOWED_EXTENSIONS = {"mp4", "avi", "mov"}
 
 ctx = zmq.asyncio.Context()
-socket = ctx.socket(zmq.REQ)  # REQ type socket for ZMQ
-socket.connect("tcp://player:5555")  # Connect to the player app
+socket = ctx.socket(zmq.REQ)
 
 #  socket.connect(f"tcp://{config['zmq']['ip_s']}:{config['zmq']['port']}")  # Connect to the player app
+socket.connect("tcp://player:5555")
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 async def send_message_to_player(message):
+    logging.info(f"Sending message: {message}")
     await socket.send_string(message)
-    print(" sending message:: "+message)
-    reply = await socket.recv_string()  # Waiting for reply
+    reply = await socket.recv_string()
     return reply
 
-# Content player REST API
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*")
 async def set_state():
     if request.method == "POST":
-        print('got a request ')
+        logging.info('Received a POST request')
         form_data = await request.form
         state = form_data.get("state")
 
         if state is None:
-            print("Error: state is None")
-        else:
-            reply = await send_message_to_player(state)
-            print(f"Reply from player: {reply}")
+            logging.error("Error: state is None")
+            return jsonify({"error": "State is None"}), 400
 
+        reply = await send_message_to_player(state)
+        logging.info(f"Reply from player: {reply}")
         return jsonify({"success": True, "reply": reply})
-    else:
-        return jsonify({"error": "Invalid request method"}), 405
+
+    return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/playlist", methods=["GET", "POST"])
 @route_cors(allow_origin="*")
@@ -73,30 +67,30 @@ async def handle_playlist():
     if request.method == "GET":
         reply = await send_message_to_player("get_playlist")
         return jsonify({"playlist": reply})
-    else:
-        return jsonify({"error": "Invalid request method"}), 405
 
+    return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/brightness", methods=["GET", "POST"])
 @route_cors(allow_origin="*")
 async def handle_brightness():
     if request.method == "POST":
-        print('got a post ')
+        logging.info('Received a POST request')
         form_data = await request.form
         brightness = float(form_data.get("brightness"))
-        brightness = int(brightness * 255.0)  # Scale brightness to be between 0 and 255
+        logging.debug(f"Brightness from flutter: {brightness}")
+        brightness = int(brightness * 255.0)
         reply = await send_message_to_player(f"set_brightness {brightness}")
-        return jsonify({"success": True, "brightness": brightness, "reply": reply})
-    elif request.method == "GET":
-        print('got a request ')
+        logging.debug(f"Brightness from player: {reply}")
+        return jsonify({"success": True, "brightness": brightness/255.0, "reply": reply})
+
+    if request.method == "GET":
+        logging.info('Received a GET request')
         brightness = await send_message_to_player("get_brightness")
-        brightness = float(brightness) / 255.0  # Scale brightness to be between 0 and 1
-        app.logger.debug(f"brightness: {brightness}")
+        brightness = float(brightness) / 255.0
+        app.logger.debug(f"Brightness: {brightness}")
         return jsonify({"success": True, "brightness": brightness, "reply": brightness})
-    else:
-        return jsonify({"error": "Invalid request method"}), 405
 
-
+    return jsonify({"error": "Invalid request method"}), 405
 
 @app.route('/api/fps', methods=['GET', 'POST'])
 @route_cors(allow_origin="*")
@@ -106,8 +100,8 @@ async def set_fps():
         fps = form_data.get("fps")
         reply = await send_message_to_player(f"set_fps {fps}")
         return jsonify({"success": True, "reply": reply})
-    else:
-        return jsonify({"error": "Invalid request method"}), 405
+
+    return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/videos", methods=['GET', 'POST', 'DELETE'])
 @route_cors(allow_origin="*")
@@ -120,45 +114,38 @@ async def handle_videos():
         ]
         return jsonify({"videos": videos})
 
-    elif request.method == "POST":
-        if "file" not in (await request.files):
-            return jsonify({"error": "No file part"}), 400
-        file = (await request.files)["file"]
-        if file.filename == "":
-            return jsonify({"error": "No file selected"}), 400
-        if file and allowed_file(file.filename):
+    if request.method == "POST":
+        file = (await request.files).get("file")
+        if not file or file.filename == "":
+            return jsonify({"error": "No file selected or file name is empty"}), 400
+        if allowed_file(file.filename):
             filename = secure_filename(file.filename)
             await file.save(os.path.join(video_dir, filename))
             return jsonify({"success": True})
-        else:
-            return jsonify({"error": "Unsupported file type"}), 400
+        return jsonify({"error": "Unsupported file type"}), 400
 
-    elif request.method == "DELETE":
+    if request.method == "DELETE":
         filename = (await request.form).get("filename")
-        if filename is None:
+        if not filename:
             return jsonify({"error": "Filename is missing"}), 400
         file_path = os.path.join(video_dir, filename)
         if os.path.exists(file_path):
             os.remove(file_path)
             return jsonify({"success": True})
-        else:
-            return jsonify({"error": "File not found"}), 404
+        return jsonify({"error": "File not found"}), 404
 
-    else:
-        return jsonify({"error": "Unsupported method"}), 405
+    return jsonify({"error": "Unsupported method"}), 405
 
-
-# WebSocket endpoint for streaming video frames
 @app.websocket('/stream')
 @route_cors(allow_origin="*")
 async def stream():
     async with aiofiles.open('video.mp4', mode='rb') as f:
         while True:
-            data = await f.read(1024)  # Read video file in chunks of 1024 bytes
+            data = await f.read(1024)
             if not data:
                 break
             await websocket.send(data)
-            await asyncio.sleep(0.1)  # Adjust this to control the streaming speed
+            await asyncio.sleep(0.1)
 
 if __name__ == '__main__':
     app.run(host = f"{config['rest_api']['ip']}", port = int(config['rest_api']['port']))
