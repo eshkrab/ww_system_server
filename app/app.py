@@ -66,11 +66,20 @@ async def set_state():
 @app.route("/api/playlist", methods=["GET", "POST"])
 @route_cors(allow_origin="*")
 async def handle_playlist():
+    playlist_path = os.path.join(video_dir, "playlist.json")
     if request.method == "GET":
-        reply = await send_message_to_player("get_playlist")
-        return jsonify({"playlist": reply})
+        async with aiofiles.open(playlist_path, "r") as f:
+            playlist = json.loads(await f.read())
+        return jsonify(playlist)
+    elif request.method == "POST":
+        playlist = await request.get_json()
+        async with aiofiles.open(playlist_path, "w") as f:
+            await f.write(json.dumps(playlist))
+        await send_message_to_player("set_playlist")
+        return jsonify({"success": True})
 
     return jsonify({"error": "Invalid request method"}), 405
+
 
 @app.route("/api/brightness", methods=["GET", "POST"])
 @route_cors(allow_origin="*")
