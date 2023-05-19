@@ -24,15 +24,17 @@ def load_config(config_file):
         config = json.load(f)
     return config
 
+
 config = load_config('config/config.json')
+video_dir = config['video_dir']
 
 ALLOWED_EXTENSIONS = {"mp4", "avi", "mov"}
 
 ctx = zmq.asyncio.Context()
 socket = ctx.socket(zmq.REQ)
 
-#  socket.connect(f"tcp://{config['zmq']['ip_s']}:{config['zmq']['port']}")  # Connect to the player app
-socket.connect("tcp://player:5555")
+socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")  # Connect to the player app
+#  socket.connect("tcp://player:5555")
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
