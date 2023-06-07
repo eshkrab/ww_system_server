@@ -23,6 +23,10 @@ app = Quart(__name__)
 #  app = cors(app, allow_origin="*")
 app = cors(app, allow_origin="*", allow_headers="*", allow_methods="*")
 
+@app.before_serving
+async def startup():
+    global zmq_lock
+    zmq_lock = asyncio.Lock()
 
 def load_config(config_file):
     with open(config_file, 'r') as f:
@@ -55,9 +59,9 @@ socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")  #
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-zmq_lock = asyncio.Lock()
 
 async def send_message_to_player(message):
+    global zmq_lock
     async with zmq_lock:
         try:
             logging.info(f"Sending message: {message}")
