@@ -55,15 +55,18 @@ socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")  #
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+zmq_lock = asyncio.Lock()
+
 async def send_message_to_player(message):
-    try:
-        logging.info(f"Sending message: {message}")
-        await socket.send_string(message)
-        reply = await socket.recv_string()
-        return reply
-    except zmq.ZMQError as e:
-        logging.error(f"ZMQError while sending/receiving message: {e}")
-        return -1
+    async with zmq_lock:
+        try:
+            logging.info(f"Sending message: {message}")
+            await socket.send_string(message)
+            reply = await socket.recv_string()
+            return reply
+        except zmq.ZMQError as e:
+            logging.error(f"ZMQError while sending/receiving message: {e}")
+            return -1
 #  def send_message_to_player(message):
 #      try:
 #          logging.info(f"Sending message: {message}")
