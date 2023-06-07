@@ -6,6 +6,12 @@ from queue import Queue
 from quart import Quart, websocket, send_file, request, jsonify
 from quart_cors import cors, route_cors
 
+#thumbnail
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+from moviepy.editor import VideoFileClip
+import hashlib
+
+
 from werkzeug.utils import secure_filename
 
 import aiofiles
@@ -14,19 +20,29 @@ import asyncio
 import logging
 
 app = Quart(__name__)
-app = cors(app, allow_origin="*")
+#  app = cors(app, allow_origin="*")
+app = cors(app, allow_origin="*", allow_headers="*", allow_methods="*")
 
-# Configuring logging
-logging.basicConfig(level=logging.DEBUG)
 
 def load_config(config_file):
     with open(config_file, 'r') as f:
         config = json.load(f)
     return config
 
+def get_log_level( level):
+    levels = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    return levels.get(level.upper(), logging.INFO)
 
 config = load_config('config/config.json')
+
 video_dir = config['video_dir']
+logging.basicConfig(level=get_log_level(config['debug']['log_level']))
 
 ALLOWED_EXTENSIONS = {"mp4", "avi", "mov"}
 
@@ -40,27 +56,102 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 async def send_message_to_player(message):
-    logging.info(f"Sending message: {message}")
-    await socket.send_string(message)
-    reply = await socket.recv_string()
-    return reply
+    try:
+        logging.info(f"Sending message: {message}")
+        await socket.send_string(message)
+        reply = await socket.recv_string()
+        return reply
+    except zmq.ZMQError as e:
+        logging.error(f"ZMQError while sending/receiving message: {e}")
+        return -1
+#  def send_message_to_player(message):
+#      try:
+#          logging.info(f"Sending message: {message}")
+#          socket.send_string(message)
+#          reply = socket.recv_string()
+#          return reply
+#      except zmq.ZMQError as e:
+#          logging.error(f"Encountered ZMQError while sending/receiving message: {e}")
+#          return None
+
+
+def generate_thumbnail_path(video_filename):
+    video_path = os.path.join(video_dir, video_filename)
+    thumbnail_filename = f"{video_filename}_thumbnail.jpg"
+    thumbnail_path = os.path.join(video_dir, thumbnail_filename)
+
+    if not os.path.exists(thumbnail_path):
+        # Load video file
+        clip = VideoFileClip(video_path)
+
+        # Find the middle frame of the video
+        midpoint = clip.duration / 2
+
+        # Save the thumbnail image
+        clip.save_frame(thumbnail_path, t=midpoint)
+
+    return thumbnail_path
+
 
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*")
 async def set_state():
     if request.method == "POST":
-        logging.info('Received a POST request')
+        logging.debug('Received a POST STATE request')
         form_data = await request.form
         state = form_data.get("state")
 
         if state is None:
-            logging.error("Error: state is None")
+            logging.error("Error: state post request is None")
             return jsonify({"error": "State is None"}), 400
 
         reply = await send_message_to_player(state)
-        logging.info(f"Reply from player: {reply}")
+        #  if reply is None:
+        #      app.logger.error(f"Error POST STATE response: {reply}")
+        #      return jsonify({"error": "An error occurred while communicating with the player"}), 500
+
+        app.logger.debug(f" POST STATE response: {reply}")
         return jsonify({"success": True, "reply": reply})
 
+    if request.method == "GET":
+        logging.debug('Received a GET STATE request')
+        state = "playing"
+        #  state = await send_message_to_player("get_state")
+        #  #  if state is None:
+        #  #      app.logger.error(f"Error POST state response is NONE")
+        #  #      return jsonify({"error": "An error occurred while communicating with the player"}), 500
+        app.logger.debug(f" GET STATE from player response: {state}")
+        return jsonify({"success": True, "state": state})
+
+    logging.error("STATE Error: Invalid request method")
+    return jsonify({"error": "Invalid request method"}), 405
+
+@app.route("/api/mode", methods=["GET", "POST"])
+@route_cors(allow_origin="*")
+async def set_mode():
+    if request.method == "POST":
+        logging.info('Received a POST request')
+        form_data = await request.form
+        mode = form_data.get("mode")
+
+        if mode is None:
+            logging.error("Error: mode is None")
+            return jsonify({"error": "mode is None"}), 400
+
+        reply = await send_message_to_player(mode.upper())
+        logging.info(f"GET MODE Reply from player: {reply}")
+        return jsonify({"success": True, "reply": reply})
+
+    if request.method == "GET":
+        #  logging.debug('Received a GET request')
+        mode = await send_message_to_player("get_mode")
+        if mode is None:
+            app.logger.error(f"Error POST state response is NONE")
+            return jsonify({"error": "An error occurred while communicating with the player"}), 500
+        app.logger.debug(f" GET state response: {mode}")
+        return jsonify({"success": True, "mode": mode, "reply": mode})
+
+    logging.error("MODE Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/playlist", methods=["GET", "POST"])
@@ -78,6 +169,7 @@ async def handle_playlist():
         await send_message_to_player("set_playlist")
         return jsonify({"success": True})
 
+    logging.error("PLAYLIST Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
 
 
@@ -85,7 +177,7 @@ async def handle_playlist():
 @route_cors(allow_origin="*")
 async def handle_brightness():
     if request.method == "POST":
-        logging.info('Received a POST request')
+        logging.info('Received a POST BRIGHTNESS request')
         form_data = await request.form
         brightness = float(form_data.get("brightness"))
         brightness = int(brightness/100.0 * 255.0)
@@ -94,23 +186,28 @@ async def handle_brightness():
         return jsonify({"success": True, "reply": reply})
 
     if request.method == "GET":
-        logging.info('Received a GET request')
+        logging.info('Received a GET BRIGHTNESS request')
         brightness = await send_message_to_player("get_brightness")
         brightness = float(brightness) / 255.0  
         app.logger.debug(f" GET Brightness response: {brightness}")
-        return jsonify({"success": True, "brightness": brightness, "reply": brightness})
+        return jsonify({"success": True, "brightness": brightness})
 
+    logging.error("BRIGHTNESS Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route('/api/fps', methods=['GET', 'POST'])
 @route_cors(allow_origin="*")
 async def set_fps():
+    if request.method == "GET":
+        fps = await send_message_to_player("get_fps")
+        return jsonify({"success": True, "fps": fps})
     if request.method == "POST":
         form_data = await request.form
-        fps = form_data.get("fps")
+        fps = int(float(form_data.get("fps")))
         reply = await send_message_to_player(f"set_fps {fps}")
         return jsonify({"success": True, "reply": reply})
 
+    logging.error("FPS Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/videos", methods=['GET', 'POST', 'DELETE'])
@@ -118,11 +215,15 @@ async def set_fps():
 async def handle_videos():
     if request.method == "GET":
         videos = [
-            f
+            {
+                "name": f,
+                "filepath": os.path.join(video_dir, f),
+                "thumbnail": generate_thumbnail_path(f)  # Assuming you have a function to generate thumbnail paths
+            }
             for f in os.listdir(video_dir)
             if os.path.isfile(os.path.join(video_dir, f)) and allowed_file(f)
         ]
-        return jsonify({"videos": videos})
+        return jsonify({"mediaFiles": videos})
 
     if request.method == "POST":
         file = (await request.files).get("file")
@@ -131,6 +232,8 @@ async def handle_videos():
         if allowed_file(file.filename):
             filename = secure_filename(file.filename)
             await file.save(os.path.join(video_dir, filename))
+            #  generate_thumbnail_path(filename)
+            logging.info(f"File {filename} saved")
             return jsonify({"success": True})
         return jsonify({"error": "Unsupported file type"}), 400
 

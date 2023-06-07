@@ -4,6 +4,9 @@ FROM python:3.9-slim-buster
 # Set the working directory in the container to /app
 WORKDIR /app
 
+# Install FFmpeg
+RUN apt-get update && apt-get install -y ffmpeg
+
 # Copy the current directory contents into the container at /app
 COPY . /app
 
