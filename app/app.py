@@ -115,8 +115,8 @@ async def set_state():
 
     if request.method == "GET":
         logging.debug('Received a GET STATE request')
-        state = "playing"
-        #  state = await send_message_to_player("get_state")
+        #  state = "playing"
+        state = await send_message_to_player("get_state")
         #  #  if state is None:
         #  #      app.logger.error(f"Error POST state response is NONE")
         #  #      return jsonify({"error": "An error occurred while communicating with the player"}), 500
