@@ -89,6 +89,8 @@ def generate_thumbnail_path(video_filename):
 
     video_path = os.path.join(video_dir, video_filename)
     if not os.path.exists(thumbnail_path):
+        if "ww" in ALLOWED_EXTENSIONS:
+            return "no thumbnails for ww"
         # Load video file
         clip = VideoFileClip(video_path)
 
