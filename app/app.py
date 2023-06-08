@@ -48,7 +48,7 @@ config = load_config('config/config.json')
 video_dir = config['video_dir']
 logging.basicConfig(level=get_log_level(config['debug']['log_level']))
 
-ALLOWED_EXTENSIONS = {"mp4", "avi", "mov"}
+ALLOWED_EXTENSIONS = config['video_ext']
 
 ctx = zmq.asyncio.Context()
 socket = ctx.socket(zmq.REQ)
@@ -88,10 +88,6 @@ def generate_thumbnail_path(video_filename):
     thumbnail_path = os.path.join(video_dir, thumbnail_filename)
 
     video_path = os.path.join(video_dir, video_filename)
-    #  video_path = os.path.join(video_dir, video_filename)
-    #  thumbnail_filename = f"{video_filename}_thumbnail.jpg"
-    #  thumbnail_path = os.path.join(video_dir, thumbnail_filename)
-
     if not os.path.exists(thumbnail_path):
         # Load video file
         clip = VideoFileClip(video_path)
@@ -272,6 +268,33 @@ async def handle_videos():
         return jsonify({"error": "File not found"}), 404
 
     return jsonify({"error": "Unsupported method"}), 405
+
+
+@app.route("/api/currentMedia", methods=["GET"])
+@route_cors(allow_origin="*")
+async def get_current_media():
+
+    current_media = await send_message_to_player("get_current_media")
+    if current_media is None:
+        app.logger.error("Error getting current media response")
+        return jsonify({"error": "An error occurred while communicating with the player"}), 500
+
+    elif type(current_media) == str:
+        video_file = {
+            "name": current_media,
+            "filepath": os.path.join(video_dir, current_media),
+            "thumbnail": generate_thumbnail_path(current_media)
+        }
+        logging.debug(f"GET CURRENT MEDIA response: {video_file}")
+        return jsonify(video_file)
+
+@app.route("/thumbnails/<filename>")
+@route_cors(allow_origin="*")
+async def serve_thumbnail(filename):
+    logging.debug(f"Thumbnail request for {filename}")
+    thumbnail_path = generate_thumbnail_path(filename)
+    logging.debug(f"Thumbnail path: {thumbnail_path}")
+    return await send_file(thumbnail_path)
 
 @app.websocket('/stream')
 @route_cors(allow_origin="*")
