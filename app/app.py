@@ -64,7 +64,7 @@ async def send_message_to_player(message):
     global zmq_lock
     async with zmq_lock:
         try:
-            logging.info(f"Sending message: {message}")
+            logging.debug(f"Sending message: {message}")
             await socket.send_string(message)
             reply = await socket.recv_string()
             return reply
@@ -83,9 +83,14 @@ async def send_message_to_player(message):
 
 
 def generate_thumbnail_path(video_filename):
-    video_path = os.path.join(video_dir, video_filename)
-    thumbnail_filename = f"{video_filename}_thumbnail.jpg"
+    video_filename = os.path.basename(video_filename)
+    thumbnail_filename = f"{os.path.splitext(video_filename)[0]}_thumbnail.jpg"
     thumbnail_path = os.path.join(video_dir, thumbnail_filename)
+
+    video_path = os.path.join(video_dir, video_filename)
+    #  video_path = os.path.join(video_dir, video_filename)
+    #  thumbnail_filename = f"{video_filename}_thumbnail.jpg"
+    #  thumbnail_path = os.path.join(video_dir, thumbnail_filename)
 
     if not os.path.exists(thumbnail_path):
         # Load video file
@@ -137,7 +142,7 @@ async def set_state():
 @route_cors(allow_origin="*")
 async def set_mode():
     if request.method == "POST":
-        logging.info('Received a POST request')
+        logging.debug('Received a POST request')
         form_data = await request.form
         mode = form_data.get("mode")
 
@@ -146,7 +151,7 @@ async def set_mode():
             return jsonify({"error": "mode is None"}), 400
 
         reply = await send_message_to_player(mode.upper())
-        logging.info(f"GET MODE Reply from player: {reply}")
+        logging.debug(f"GET MODE Reply from player: {reply}")
         return jsonify({"success": True, "reply": reply})
 
     if request.method == "GET":
@@ -166,8 +171,17 @@ async def set_mode():
 async def handle_playlist():
     playlist_path = os.path.join(video_dir, "playlist.json")
     if request.method == "GET":
+    #  # Replace this part with static response
+    #      playlist = {
+    #          "playlist": [
+    #              {"name": "Sample Video 1", "filepath": "/path/to/sample1.mp4", "thumbnail": "/path/to/sample1_thumbnail.jpg"},
+    #              {"name": "Sample Video 2", "filepath": "/path/to/sample2.mp4", "thumbnail": "/path/to/sample2_thumbnail.jpg"},
+    #          ],
+    #          "mode": "repeat"
+    #      }
         async with aiofiles.open(playlist_path, "r") as f:
             playlist = json.loads(await f.read())
+        logging.debug(f"GET PLAYLIST response: {playlist}")
         return jsonify(playlist)
     elif request.method == "POST":
         playlist = await request.get_json()
@@ -184,19 +198,19 @@ async def handle_playlist():
 @route_cors(allow_origin="*")
 async def handle_brightness():
     if request.method == "POST":
-        logging.info('Received a POST BRIGHTNESS request')
+        #  logging.debug('Received a POST BRIGHTNESS request')
         form_data = await request.form
         brightness = float(form_data.get("brightness"))
         brightness = int(brightness/100.0 * 255.0)
         reply = await send_message_to_player(f"set_brightness {brightness}")
-        logging.debug(f"Brightness from player: {reply}")
+        #  logging.debug(f"Brightness from player: {reply}")
         return jsonify({"success": True, "reply": reply})
 
     if request.method == "GET":
-        logging.info('Received a GET BRIGHTNESS request')
+        #  logging.debug('Received a GET BRIGHTNESS request')
         brightness = await send_message_to_player("get_brightness")
         brightness = float(brightness) / 255.0  
-        app.logger.debug(f" GET Brightness response: {brightness}")
+        #  app.logger.debug(f" GET Brightness response: {brightness}")
         return jsonify({"success": True, "brightness": brightness})
 
     logging.error("BRIGHTNESS Error: Invalid request method")
@@ -206,8 +220,11 @@ async def handle_brightness():
 @route_cors(allow_origin="*")
 async def set_fps():
     if request.method == "GET":
+        #  logging.debug('Received a GET FPS request')
         fps = await send_message_to_player("get_fps")
-        return jsonify({"success": True, "fps": fps})
+        #  logging.debug(f"FPS from player: {fps}")
+        return jsonify({"success": True, "fps": float(fps)})
+
     if request.method == "POST":
         form_data = await request.form
         fps = int(float(form_data.get("fps")))
@@ -240,7 +257,7 @@ async def handle_videos():
             filename = secure_filename(file.filename)
             await file.save(os.path.join(video_dir, filename))
             #  generate_thumbnail_path(filename)
-            logging.info(f"File {filename} saved")
+            logging.debug(f"File {filename} saved")
             return jsonify({"success": True})
         return jsonify({"error": "Unsupported file type"}), 400
 
@@ -259,7 +276,7 @@ async def handle_videos():
 @app.websocket('/stream')
 @route_cors(allow_origin="*")
 async def stream():
-    async with aiofiles.open('video.mp4', mode='rb') as f:
+    async with aiofiles.open('content/box_test.mov', mode='rb') as f:
         while True:
             data = await f.read(1024)
             if not data:
