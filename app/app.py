@@ -104,7 +104,7 @@ def generate_thumbnail_path(video_filename):
 
 
 @app.route("/api/state", methods=["GET", "POST"])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def set_state():
     if request.method == "POST":
         logging.debug('Received a POST STATE request')
@@ -137,7 +137,7 @@ async def set_state():
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/mode", methods=["GET", "POST"])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def set_mode():
     if request.method == "POST":
         logging.debug('Received a POST request')
@@ -165,7 +165,7 @@ async def set_mode():
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/playlist", methods=["GET", "POST"])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def handle_playlist():
     playlist_path = os.path.join(video_dir, "playlist.json")
     if request.method == "GET":
@@ -193,7 +193,7 @@ async def handle_playlist():
 
 
 @app.route("/api/brightness", methods=["GET", "POST"])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def handle_brightness():
     if request.method == "POST":
         #  logging.debug('Received a POST BRIGHTNESS request')
@@ -215,7 +215,7 @@ async def handle_brightness():
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route('/api/fps', methods=['GET', 'POST'])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def set_fps():
     if request.method == "GET":
         #  logging.debug('Received a GET FPS request')
@@ -233,7 +233,7 @@ async def set_fps():
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/videos", methods=['GET', 'POST', 'DELETE'])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def handle_videos():
     if request.method == "GET":
         videos = [
@@ -273,7 +273,7 @@ async def handle_videos():
 
 
 @app.route("/api/currentMedia", methods=["GET"])
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def get_current_media():
 
     current_media = await send_message_to_player("get_current_media")
@@ -291,7 +291,7 @@ async def get_current_media():
         return jsonify(video_file)
 
 @app.route("/thumbnails/<filename>")
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def serve_thumbnail(filename):
     logging.debug(f"Thumbnail request for {filename}")
     thumbnail_path = generate_thumbnail_path(filename)
@@ -299,7 +299,7 @@ async def serve_thumbnail(filename):
     return await send_file(thumbnail_path)
 
 @app.websocket('/stream')
-@route_cors(allow_origin="*")
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def stream():
     async with aiofiles.open('content/box_test.mov', mode='rb') as f:
         while True:
