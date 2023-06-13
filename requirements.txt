@@ -4,3 +4,4 @@ asyncio
 aiofiles
 zmq
 moviepy
+cerberus
