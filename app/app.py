@@ -6,9 +6,7 @@ from quart_cors import cors, route_cors
 from werkzeug.utils import secure_filename
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 from moviepy.editor import VideoFileClip
-
-from cerberus import Schema
-
+from cerberus import Validator
 import aiofiles
 import asyncio
 import logging
@@ -16,9 +14,9 @@ import logging
 app = Quart(__name__)
 app = cors(app, allow_origin="*", allow_headers="*", allow_methods="*")
 
-def load_config(config_file):
-    with open(config_file, 'r') as f:
-        config = json.load(f)
+async def load_config(config_file):
+    async with aiofiles.open(config_file, 'r') as f:
+        config = json.loads(await f.read())
     return config
 
 def get_log_level(level):
@@ -31,19 +29,19 @@ def get_log_level(level):
     }
     return levels.get(level.upper(), logging.INFO)
 
-config = load_config('config/config.json')
+config = asyncio.run(load_config('config/config.json'))
 
 video_dir = config['video_dir']
 logging.basicConfig(level=get_log_level(config['debug']['log_level']))
 
-ALLOWED_EXTENSIONS = config['video_ext']
+ALLOWED_EXTENSIONS = set(config['video_ext'])
 
 async def start_zmq_connection():
     global zmq_queue
 
     ctx = zmq.asyncio.Context()
     socket = ctx.socket(zmq.REQ)
-    
+
     while True:
         try:
             socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")
@@ -57,17 +55,59 @@ async def start_zmq_connection():
     async def zmq_worker():
         while True:
             message = await zmq_queue.get()
-            try:
-                await socket.send_string(message)
-                reply = await socket.recv_string()
-                zmq_queue.task_done()
-                zmq_queue.put_nowait(reply)
-            except zmq.ZMQError as e:
-                logging.error(f"ZMQError while sending/receiving message: {e}")
-                zmq_queue.task_done()
-                zmq_queue.put_nowait(None)
+            while True:  # Loop until message is successfully sent and reply received.
+                try:
+                    await socket.send_string(message)
+                    reply = await socket.recv_string()
+                    break  # If sending and receiving were successful, exit the loop.
+                except zmq.ZMQError as e:
+                    logging.error(f"ZMQError while sending/receiving message: {e}")
+                    logging.error("Trying to reconnect...")
+                    while True:
+                        try:
+                            socket.close()  # Close the old socket
+                            socket = ctx.socket(zmq.REQ)  # Create a new socket
+                            socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")  # Try to reconnect
+                            break  # If connection was successful, exit the loop
+                        except zmq.ZMQError as e:
+                            logging.error(f"ZMQError while connecting to server: {e}")
+                            await asyncio.sleep(1)  # If not successful, wait and try again
+
+            zmq_queue.task_done()
+            zmq_queue.put_nowait(reply)
 
     asyncio.create_task(zmq_worker())
+
+#  async def start_zmq_connection():
+#      global zmq_queue
+#
+#      ctx = zmq.asyncio.Context()
+#      socket = ctx.socket(zmq.REQ)
+#
+#      while True:
+#          try:
+#              socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")
+#              break
+#          except zmq.ZMQError as e:
+#              logging.error(f"ZMQError while connecting to server: {e}")
+#              await asyncio.sleep(1)
+#
+#      zmq_queue = asyncio.Queue()
+#
+#      async def zmq_worker():
+#          while True:
+#              message = await zmq_queue.get()
+#              try:
+#                  await socket.send_string(message)
+#                  reply = await socket.recv_string()
+#                  zmq_queue.task_done()
+#                  zmq_queue.put_nowait(reply)
+#              except zmq.ZMQError as e:
+#                  logging.error(f"ZMQError while sending/receiving message: {e}")
+#                  zmq_queue.task_done()
+#                  zmq_queue.put_nowait(None)
+#
+#      asyncio.create_task(zmq_worker())
 
 @app.before_serving
 async def init():
@@ -76,7 +116,7 @@ async def init():
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def generate_thumbnail_path(video_filename):
+async def generate_thumbnail_path(video_filename):
     video_filename = os.path.basename(video_filename)
     thumbnail_filename = f"{os.path.splitext(video_filename)[0]}_thumbnail.jpg"
     thumbnail_path = os.path.join(video_dir, thumbnail_filename)
@@ -97,49 +137,40 @@ def generate_thumbnail_path(video_filename):
 
     return thumbnail_path
 
-# Input validation decorator
-def validate_inputs(schema):
+def validate_input(schema):
+    v = Validator(schema)
     def decorator(func):
         async def wrapper(*args, **kwargs):
-            try:
-                validated_data = await request.get_json(force=True)
-                schema.validate(validated_data)
-                return await func(*args, **kwargs)
-            except Exception as e:
-                return jsonify({"error": str(e)}), 400
+            payload = await request.get_json(force=True)
+            if v.validate(payload):
+                return await func(*args, **kwargs, payload=v.document)
+            return jsonify({"error": v.errors}), 400
         return wrapper
     return decorator
 
-# Schema for video upload validation
-video_upload_schema = Schema({
-    Required("file"): Any(
-        File(supported_extensions=ALLOWED_EXTENSIONS),
-        error="No file selected or unsupported file type"
-    )
-})
+video_upload_schema = {
+    "file": {"type": "string", "required": True}
+}
 
-# Schema for playlist update validation
-playlist_update_schema = Schema({
-    Required("playlist"): [
-        {
-            Required("name"): And(str, len),
-            Required("filepath"): And(str, len),
-            Required("thumbnail"): And(str, len)
-        }
-    ],
-    Required("mode"): And(str, len)
-})
+playlist_update_schema = {
+    "playlist": {
+        "type": "list", "schema": {
+            "type": "dict", "schema": {
+                "name": {"type": "string", "required": True},
+                "filepath": {"type": "string", "required": True},
+                "thumbnail": {"type": "string", "required": True}
+            }
+        }, "required": True
+    },
+    "mode": {"type": "string", "required": True}
+}
 
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def set_state():
+@validate_input({"state": {"type": "string", "required": True}})
+async def set_state(payload=None):
     if request.method == "POST":
-        form_data = await request.form
-        state = form_data.get("state")
-
-        if state is None:
-            return jsonify({"error": "State is None"}), 400
-
+        state = payload.get("state")
         zmq_queue.put_nowait(state)
         reply = await zmq_queue.get()
         zmq_queue.task_done()
@@ -156,14 +187,10 @@ async def set_state():
 
 @app.route("/api/mode", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def set_mode():
+@validate_input({"mode": {"type": "string", "required": True}})
+async def set_mode(payload=None):
     if request.method == "POST":
-        form_data = await request.form
-        mode = form_data.get("mode")
-
-        if mode is None:
-            return jsonify({"error": "Mode is None"}), 400
-
+        mode = payload.get("mode")
         zmq_queue.put_nowait(mode.upper())
         reply = await zmq_queue.get()
         zmq_queue.task_done()
@@ -180,7 +207,8 @@ async def set_mode():
 
 @app.route("/api/playlist", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def handle_playlist():
+@validate_input(playlist_update_schema)
+async def handle_playlist(payload=None):
     playlist_path = os.path.join(video_dir, "playlist.json")
 
     if request.method == "GET":
@@ -189,10 +217,8 @@ async def handle_playlist():
         return jsonify(playlist)
 
     if request.method == "POST":
-        validated_data = await request.get_json(force=True)
-        playlist_update_schema.validate(validated_data)
         async with aiofiles.open(playlist_path, "w") as f:
-            await f.write(json.dumps(validated_data))
+            await f.write(json.dumps(payload))
         zmq_queue.put_nowait("set_playlist")
         return jsonify({"success": True})
 
@@ -200,13 +226,14 @@ async def handle_playlist():
 
 @app.route("/api/videos", methods=['GET', 'POST', 'DELETE'])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def handle_videos():
+@validate_input(video_upload_schema)
+async def handle_videos(payload=None):
     if request.method == "GET":
         videos = []
         for filename in os.listdir(video_dir):
             if os.path.isfile(os.path.join(video_dir, filename)) and allowed_file(filename):
                 filepath = os.path.join(video_dir, filename)
-                thumbnail = generate_thumbnail_path(filepath)
+                thumbnail = await generate_thumbnail_path(filepath)
                 if thumbnail:
                     video = {
                         "name": filename,
@@ -217,79 +244,42 @@ async def handle_videos():
         return jsonify({"mediaFiles": videos})
 
     if request.method == "POST":
-        validated_data = await request.get_json(force=True)
-        video_upload_schema.validate(validated_data)
-        file = request.files.get("file")
+        file = payload.get("file")
 
         if file is None:
-            return jsonify({"error": "No file selected"}), 400
+            return jsonify({"error": "No file part"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"error": "Invalid file extension"}), 400
 
         filename = secure_filename(file.filename)
         filepath = os.path.join(video_dir, filename)
-        thumbnail = generate_thumbnail_path(filepath)
 
-        await file.save(filepath)
+        file.save(filepath)
+        thumbnail = await generate_thumbnail_path(filepath)
 
-        return jsonify({"success": True})
+        if not thumbnail:
+            return jsonify({"error": "Thumbnail generation failed"}), 500
+
+        video = {
+            "name": filename,
+            "filepath": filepath,
+            "thumbnail": thumbnail
+        }
+
+        return jsonify({"success": True, "video": video})
 
     if request.method == "DELETE":
-        filename = (await request.get_json(force=True)).get("filename")
-
-        if filename is None:
-            return jsonify({"error": "Filename is missing"}), 400
-
+        filename = payload.get("filename")
         filepath = os.path.join(video_dir, filename)
-
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            return jsonify({"success": True})
-
-        return jsonify({"error": "File not found"}), 404
+        os.remove(filepath)
+        return jsonify({"success": True})
 
     return jsonify({"error": "Invalid request method"}), 405
 
-@app.route("/api/currentMedia", methods=["GET"])
-@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def get_current_media():
-    current_media = await zmq_queue.get()
-    zmq_queue.task_done()
-    zmq_queue.put_nowait(current_media)
+if __name__ == "__main__":
+    app.run(host=config['app']['ip'], port=config['app']['port'])
 
-    if isinstance(current_media, str):
-        filepath = os.path.join(video_dir, current_media)
-        thumbnail = generate_thumbnail_path(filepath)
-        if thumbnail:
-            video_file = {
-                "name": current_media,
-                "filepath": filepath,
-                "thumbnail": thumbnail
-            }
-            return jsonify(video_file)
-
-    return jsonify({"error": "An error occurred while communicating with the player"}), 500
-
-@app.route("/thumbnails/<filename>")
-@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def serve_thumbnail(filename):
-    thumbnail_path = generate_thumbnail_path(filename)
-    if thumbnail_path:
-        return await send_from_directory(video_dir, os.path.basename(thumbnail_path))
-    return jsonify({"error": "Thumbnail not found"}), 404
-
-@app.websocket('/stream')
-@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def stream():
-    filepath = 'content/box_test.mov'  # Replace with your video file
-    async with aiofiles.open(filepath, mode='rb') as f:
-        while True:
-            data = await f.read(1024)
-            if not data:
-                break
-            await websocket.send(data)
-            await asyncio.sleep(0.1)
-
-if __name__ == '__main__':
-    app.run(host=f"{config['rest_api']['ip']}", port=int(config['rest_api']['port']))
 
 #  import os
 #  import json
