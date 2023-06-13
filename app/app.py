@@ -1,7 +1,7 @@
 import os
 import json
 import zmq.asyncio
-from quart import Quart, websocket, send_from_directory, request, jsonify
+from quart import Quart, request, jsonify
 from quart_cors import cors, route_cors
 from werkzeug.utils import secure_filename
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
@@ -78,37 +78,6 @@ async def start_zmq_connection():
 
     asyncio.create_task(zmq_worker())
 
-#  async def start_zmq_connection():
-#      global zmq_queue
-#
-#      ctx = zmq.asyncio.Context()
-#      socket = ctx.socket(zmq.REQ)
-#
-#      while True:
-#          try:
-#              socket.connect(f"tcp://{config['zmq']['ip_server']}:{config['zmq']['port']}")
-#              break
-#          except zmq.ZMQError as e:
-#              logging.error(f"ZMQError while connecting to server: {e}")
-#              await asyncio.sleep(1)
-#
-#      zmq_queue = asyncio.Queue()
-#
-#      async def zmq_worker():
-#          while True:
-#              message = await zmq_queue.get()
-#              try:
-#                  await socket.send_string(message)
-#                  reply = await socket.recv_string()
-#                  zmq_queue.task_done()
-#                  zmq_queue.put_nowait(reply)
-#              except zmq.ZMQError as e:
-#                  logging.error(f"ZMQError while sending/receiving message: {e}")
-#                  zmq_queue.task_done()
-#                  zmq_queue.put_nowait(None)
-#
-#      asyncio.create_task(zmq_worker())
-
 @app.before_serving
 async def init():
     await start_zmq_connection()
@@ -165,30 +134,18 @@ playlist_update_schema = {
     "mode": {"type": "string", "required": True}
 }
 
-@app.route("/api/state", methods=["GET", "POST"])
+@app.route("/api/state", methods=["GET"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def set_state():
-    if request.method == "POST":
-        return await set_state_post()
+async def get_state():
+    state = await zmq_queue.get()
+    zmq_queue.task_done()
+    zmq_queue.put_nowait(state)
+    return jsonify({"success": True, "state": state})
 
-    if request.method == "GET":
-        return await set_state_get()
-
-    return jsonify({"error": "Invalid request method"}), 405
-
-@app.route("/api/mode", methods=["GET", "POST"])
+@app.route("/api/state", methods=["POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def set_mode():
-    if request.method == "POST":
-        return await set_mode_post()
-
-    if request.method == "GET":
-        return await set_mode_get()
-
-    return jsonify({"error": "Invalid request method"}), 405
-
 @validate_input({"state": {"type": "string", "required": True}})
-async def set_state_post(payload=None):
+async def post_state(payload=None):
     state = payload.get("state")
     zmq_queue.put_nowait(state)
     reply = await zmq_queue.get()
@@ -196,14 +153,18 @@ async def set_state_post(payload=None):
     zmq_queue.put_nowait(reply)
     return jsonify({"success": True, "reply": reply})
 
-async def set_state_get():
-    state = await zmq_queue.get()
+@app.route("/api/mode", methods=["GET"])
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+async def get_mode():
+    mode = await zmq_queue.get()
     zmq_queue.task_done()
-    zmq_queue.put_nowait(state)
-    return jsonify({"success": True, "state": state})
+    zmq_queue.put_nowait(mode)
+    return jsonify({"success": True, "mode": mode})
 
+@app.route("/api/mode", methods=["POST"])
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input({"mode": {"type": "string", "required": True}})
-async def set_mode_post(payload=None):
+async def post_mode(payload=None):
     mode = payload.get("mode")
     zmq_queue.put_nowait(mode.upper())
     reply = await zmq_queue.get()
@@ -211,123 +172,78 @@ async def set_mode_post(payload=None):
     zmq_queue.put_nowait(reply)
     return jsonify({"success": True, "reply": reply})
 
-async def set_mode_get():
-    mode = await zmq_queue.get()
-    zmq_queue.task_done()
-    zmq_queue.put_nowait(mode)
-    return jsonify({"success": True, "mode": mode})
+@app.route("/api/playlist", methods=["GET"])
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+async def get_playlist():
+    playlist_path = os.path.join(video_dir, "playlist.json")
+    async with aiofiles.open(playlist_path, "r") as f:
+        playlist = json.loads(await f.read())
+    return jsonify(playlist)
 
-#  @app.route("/api/state", methods=["GET", "POST"])
-#  @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-#  @validate_input({"state": {"type": "string", "required": True}})
-#  async def set_state(payload=None):
-#      if request.method == "POST":
-#          state = payload.get("state")
-#          zmq_queue.put_nowait(state)
-#          reply = await zmq_queue.get()
-#          zmq_queue.task_done()
-#          zmq_queue.put_nowait(reply)
-#          return jsonify({"success": True, "reply": reply})
-#
-#      if request.method == "GET":
-#          state = await zmq_queue.get()
-#          zmq_queue.task_done()
-#          zmq_queue.put_nowait(state)
-#          return jsonify({"success": True, "state": state})
-#
-#      return jsonify({"error": "Invalid request method"}), 405
-#
-#  @app.route("/api/mode", methods=["GET", "POST"])
-#  @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-#  @validate_input({"mode": {"type": "string", "required": True}})
-#  async def set_mode(payload=None):
-#      if request.method == "POST":
-#          mode = payload.get("mode")
-#          zmq_queue.put_nowait(mode.upper())
-#          reply = await zmq_queue.get()
-#          zmq_queue.task_done()
-#          zmq_queue.put_nowait(reply)
-#          return jsonify({"success": True, "reply": reply})
-#
-#      if request.method == "GET":
-#          mode = await zmq_queue.get()
-#          zmq_queue.task_done()
-#          zmq_queue.put_nowait(mode)
-#          return jsonify({"success": True, "mode": mode})
-#
-#      return jsonify({"error": "Invalid request method"}), 405
-
-@app.route("/api/playlist", methods=["GET", "POST"])
+@app.route("/api/playlist", methods=["POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input(playlist_update_schema)
-async def handle_playlist(payload=None):
+async def post_playlist(payload=None):
     playlist_path = os.path.join(video_dir, "playlist.json")
+    async with aiofiles.open(playlist_path, "w") as f:
+        await f.write(json.dumps(payload))
+    zmq_queue.put_nowait("set_playlist")
+    return jsonify({"success": True})
 
-    if request.method == "GET":
-        async with aiofiles.open(playlist_path, "r") as f:
-            playlist = json.loads(await f.read())
-        return jsonify(playlist)
+@app.route("/api/videos", methods=['GET'])
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+async def get_videos():
+    videos = []
+    for filename in os.listdir(video_dir):
+        if os.path.isfile(os.path.join(video_dir, filename)) and allowed_file(filename):
+            filepath = os.path.join(video_dir, filename)
+            thumbnail = await generate_thumbnail_path(filepath)
+            if thumbnail:
+                video = {
+                    "name": filename,
+                    "filepath": filepath,
+                    "thumbnail": thumbnail
+                }
+                videos.append(video)
+    return jsonify({"mediaFiles": videos})
 
-    if request.method == "POST":
-        async with aiofiles.open(playlist_path, "w") as f:
-            await f.write(json.dumps(payload))
-        zmq_queue.put_nowait("set_playlist")
-        return jsonify({"success": True})
-
-    return jsonify({"error": "Invalid request method"}), 405
-
-@app.route("/api/videos", methods=['GET', 'POST', 'DELETE'])
+@app.route("/api/videos", methods=['POST'])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input(video_upload_schema)
-async def handle_videos(payload=None):
-    if request.method == "GET":
-        videos = []
-        for filename in os.listdir(video_dir):
-            if os.path.isfile(os.path.join(video_dir, filename)) and allowed_file(filename):
-                filepath = os.path.join(video_dir, filename)
-                thumbnail = await generate_thumbnail_path(filepath)
-                if thumbnail:
-                    video = {
-                        "name": filename,
-                        "filepath": filepath,
-                        "thumbnail": thumbnail
-                    }
-                    videos.append(video)
-        return jsonify({"mediaFiles": videos})
+async def post_video(payload=None):
+    file = payload.get("file")
 
-    if request.method == "POST":
-        file = payload.get("file")
+    if file is None:
+        return jsonify({"error": "No file part"}), 400
 
-        if file is None:
-            return jsonify({"error": "No file part"}), 400
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Invalid file extension"}), 400
 
-        if not allowed_file(file.filename):
-            return jsonify({"error": "Invalid file extension"}), 400
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(video_dir, filename)
 
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(video_dir, filename)
+    file.save(filepath)
+    thumbnail = await generate_thumbnail_path(filepath)
 
-        file.save(filepath)
-        thumbnail = await generate_thumbnail_path(filepath)
+    if not thumbnail:
+        return jsonify({"error": "Thumbnail generation failed"}), 500
 
-        if not thumbnail:
-            return jsonify({"error": "Thumbnail generation failed"}), 500
+    video = {
+        "name": filename,
+        "filepath": filepath,
+        "thumbnail": thumbnail
+    }
 
-        video = {
-            "name": filename,
-            "filepath": filepath,
-            "thumbnail": thumbnail
-        }
+    return jsonify({"success": True, "video": video})
 
-        return jsonify({"success": True, "video": video})
-
-    if request.method == "DELETE":
-        filename = payload.get("filename")
-        filepath = os.path.join(video_dir, filename)
-        os.remove(filepath)
-        return jsonify({"success": True})
-
-    return jsonify({"error": "Invalid request method"}), 405
+@app.route("/api/videos", methods=['DELETE'])
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+@validate_input({"filename": {"type": "string", "required": True}})
+async def delete_video(payload=None):
+    filename = payload.get("filename")
+    filepath = os.path.join(video_dir, filename)
+    os.remove(filepath)
+    return jsonify({"success": True})
 
 if __name__ == "__main__":
     app.run(host=config['app']['ip'], port=config['app']['port'])
