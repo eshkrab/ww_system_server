@@ -109,12 +109,12 @@ async def generate_thumbnail_path(video_filename):
 def validate_input(schema):
     v = Validator(schema)
     def decorator(func):
-        async def wrapper(*args, **kwargs):
+        async def validate_wrapper(*args, **kwargs):
             payload = await request.get_json(force=True)
             if v.validate(payload):
                 return await func(*args, **kwargs, payload=v.document)
             return jsonify({"error": v.errors}), 400
-        return wrapper
+        return validate_wrapper
     return decorator
 
 video_upload_schema = {
@@ -136,7 +136,7 @@ playlist_update_schema = {
 
 @app.route("/api/state", methods=["GET"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def get_state():
+async def get_state_handler():
     state = await zmq_queue.get()
     zmq_queue.task_done()
     zmq_queue.put_nowait(state)
@@ -145,7 +145,7 @@ async def get_state():
 @app.route("/api/state", methods=["POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input({"state": {"type": "string", "required": True}})
-async def post_state(payload=None):
+async def post_state_handler(payload=None):
     state = payload.get("state")
     zmq_queue.put_nowait(state)
     reply = await zmq_queue.get()
@@ -155,7 +155,7 @@ async def post_state(payload=None):
 
 @app.route("/api/mode", methods=["GET"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def get_mode():
+async def get_mode_handler():
     mode = await zmq_queue.get()
     zmq_queue.task_done()
     zmq_queue.put_nowait(mode)
@@ -164,7 +164,7 @@ async def get_mode():
 @app.route("/api/mode", methods=["POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input({"mode": {"type": "string", "required": True}})
-async def post_mode(payload=None):
+async def post_mode_handler(payload=None):
     mode = payload.get("mode")
     zmq_queue.put_nowait(mode.upper())
     reply = await zmq_queue.get()
@@ -174,7 +174,7 @@ async def post_mode(payload=None):
 
 @app.route("/api/playlist", methods=["GET"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def get_playlist():
+async def get_playlist_handler():
     playlist_path = os.path.join(video_dir, "playlist.json")
     async with aiofiles.open(playlist_path, "r") as f:
         playlist = json.loads(await f.read())
@@ -183,7 +183,7 @@ async def get_playlist():
 @app.route("/api/playlist", methods=["POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input(playlist_update_schema)
-async def post_playlist(payload=None):
+async def post_playlist_handler(payload=None):
     playlist_path = os.path.join(video_dir, "playlist.json")
     async with aiofiles.open(playlist_path, "w") as f:
         await f.write(json.dumps(payload))
@@ -192,7 +192,7 @@ async def post_playlist(payload=None):
 
 @app.route("/api/videos", methods=['GET'])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-async def get_videos():
+async def get_videos_handler():
     videos = []
     for filename in os.listdir(video_dir):
         if os.path.isfile(os.path.join(video_dir, filename)) and allowed_file(filename):
@@ -210,7 +210,7 @@ async def get_videos():
 @app.route("/api/videos", methods=['POST'])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input(video_upload_schema)
-async def post_video(payload=None):
+async def post_video_handler(payload=None):
     file = payload.get("file")
 
     if file is None:
@@ -239,7 +239,7 @@ async def post_video(payload=None):
 @app.route("/api/videos", methods=['DELETE'])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 @validate_input({"filename": {"type": "string", "required": True}})
-async def delete_video(payload=None):
+async def delete_video_handler(payload=None):
     filename = payload.get("filename")
     filepath = os.path.join(video_dir, filename)
     os.remove(filepath)
