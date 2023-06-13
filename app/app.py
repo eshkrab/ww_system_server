@@ -167,43 +167,95 @@ playlist_update_schema = {
 
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-@validate_input({"state": {"type": "string", "required": True}})
-async def set_state(payload=None):
+async def set_state():
     if request.method == "POST":
-        state = payload.get("state")
-        zmq_queue.put_nowait(state)
-        reply = await zmq_queue.get()
-        zmq_queue.task_done()
-        zmq_queue.put_nowait(reply)
-        return jsonify({"success": True, "reply": reply})
+        return await set_state_post()
 
     if request.method == "GET":
-        state = await zmq_queue.get()
-        zmq_queue.task_done()
-        zmq_queue.put_nowait(state)
-        return jsonify({"success": True, "state": state})
+        return await set_state_get()
 
     return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/mode", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
-@validate_input({"mode": {"type": "string", "required": True}})
-async def set_mode(payload=None):
+async def set_mode():
     if request.method == "POST":
-        mode = payload.get("mode")
-        zmq_queue.put_nowait(mode.upper())
-        reply = await zmq_queue.get()
-        zmq_queue.task_done()
-        zmq_queue.put_nowait(reply)
-        return jsonify({"success": True, "reply": reply})
+        return await set_mode_post()
 
     if request.method == "GET":
-        mode = await zmq_queue.get()
-        zmq_queue.task_done()
-        zmq_queue.put_nowait(mode)
-        return jsonify({"success": True, "mode": mode})
+        return await set_mode_get()
 
     return jsonify({"error": "Invalid request method"}), 405
+
+@validate_input({"state": {"type": "string", "required": True}})
+async def set_state_post(payload=None):
+    state = payload.get("state")
+    zmq_queue.put_nowait(state)
+    reply = await zmq_queue.get()
+    zmq_queue.task_done()
+    zmq_queue.put_nowait(reply)
+    return jsonify({"success": True, "reply": reply})
+
+async def set_state_get():
+    state = await zmq_queue.get()
+    zmq_queue.task_done()
+    zmq_queue.put_nowait(state)
+    return jsonify({"success": True, "state": state})
+
+@validate_input({"mode": {"type": "string", "required": True}})
+async def set_mode_post(payload=None):
+    mode = payload.get("mode")
+    zmq_queue.put_nowait(mode.upper())
+    reply = await zmq_queue.get()
+    zmq_queue.task_done()
+    zmq_queue.put_nowait(reply)
+    return jsonify({"success": True, "reply": reply})
+
+async def set_mode_get():
+    mode = await zmq_queue.get()
+    zmq_queue.task_done()
+    zmq_queue.put_nowait(mode)
+    return jsonify({"success": True, "mode": mode})
+
+#  @app.route("/api/state", methods=["GET", "POST"])
+#  @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+#  @validate_input({"state": {"type": "string", "required": True}})
+#  async def set_state(payload=None):
+#      if request.method == "POST":
+#          state = payload.get("state")
+#          zmq_queue.put_nowait(state)
+#          reply = await zmq_queue.get()
+#          zmq_queue.task_done()
+#          zmq_queue.put_nowait(reply)
+#          return jsonify({"success": True, "reply": reply})
+#
+#      if request.method == "GET":
+#          state = await zmq_queue.get()
+#          zmq_queue.task_done()
+#          zmq_queue.put_nowait(state)
+#          return jsonify({"success": True, "state": state})
+#
+#      return jsonify({"error": "Invalid request method"}), 405
+#
+#  @app.route("/api/mode", methods=["GET", "POST"])
+#  @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+#  @validate_input({"mode": {"type": "string", "required": True}})
+#  async def set_mode(payload=None):
+#      if request.method == "POST":
+#          mode = payload.get("mode")
+#          zmq_queue.put_nowait(mode.upper())
+#          reply = await zmq_queue.get()
+#          zmq_queue.task_done()
+#          zmq_queue.put_nowait(reply)
+#          return jsonify({"success": True, "reply": reply})
+#
+#      if request.method == "GET":
+#          mode = await zmq_queue.get()
+#          zmq_queue.task_done()
+#          zmq_queue.put_nowait(mode)
+#          return jsonify({"success": True, "mode": mode})
+#
+#      return jsonify({"error": "Invalid request method"}), 405
 
 @app.route("/api/playlist", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
