@@ -248,7 +248,6 @@ async def delete_video(payload=None):
 if __name__ == "__main__":
     app.run(host=config['app']['ip'], port=config['app']['port'])
 
-
 #  import os
 #  import json
 #  import zmq
