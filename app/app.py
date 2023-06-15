@@ -196,7 +196,7 @@ async def handle_playlist():
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def handle_brightness():
 	if request.method == "POST":
-		logging.debug('Received a POST BRIGHTNESS request')
+		#  logging.debug('Received a POST BRIGHTNESS request')
 		form_data = await request.form
 		brightness = float(form_data.get("brightness"))
 		brightness = int(brightness/100.0 * 255.0)
@@ -205,10 +205,10 @@ async def handle_brightness():
 		return jsonify({"success": True, "reply": reply})
 
 	if request.method == "GET":
-		logging.debug('Received a GET BRIGHTNESS request')
+		#  logging.debug('Received a GET BRIGHTNESS request')
 		brightness = await send_message_to_player("get_brightness")
 		brightness = float(brightness) / 255.0
-		app.logger.debug(f" GET Brightness response: {brightness}")
+		#  app.logger.debug(f" GET Brightness response: {brightness}")
 		return jsonify({"success": True, "brightness": brightness})
 
 	logging.error("BRIGHTNESS Error: Invalid request method")
