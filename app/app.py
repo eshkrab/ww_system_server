@@ -105,8 +105,8 @@ async def subscribe_to_player():
     while True:
         message = await sub_socket.recv_string()
         logging.debug(f"Received from Player: {message}")
+
         # Process the received message
-        # You can call other functions or trigger events based on the received message
         message = message.split(" ")
         if message[0] == "state":
             player.state = message[1]
