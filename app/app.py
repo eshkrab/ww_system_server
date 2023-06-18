@@ -20,12 +20,12 @@ import asyncio
 import logging
 
 class Player:
-    def __init__(self):
-        self.state = "stopped"
-        self.mode = "repeat"
-        self.brightness = 40
-        self.fps = 30
-        self.current_media = None
+    def __init__(self, brightness=250.0, fps=30, state="stopped", mode="repeat", current_media=None):
+        self.state = state
+        self.mode = mode
+        self.brightness = brightness
+        self.fps = fps
+        self.current_media = current_media
 
 app = Quart(__name__)
 #  app = cors(app, allow_origin="*")
@@ -50,6 +50,11 @@ config = load_config('config/config.json')
 
 video_dir = config['video_dir']
 logging.basicConfig(level=get_log_level(config['debug']['log_level']))
+
+############################
+# Player
+############################
+player = Player(brightness=config['brightness_level'], fps=config['fps'])
 
 ALLOWED_EXTENSIONS = config['video_ext']
 def allowed_file(filename):
@@ -102,8 +107,22 @@ async def subscribe_to_player():
         logging.debug(f"Received from Player: {message}")
         # Process the received message
         # You can call other functions or trigger events based on the received message
+        message = message.split(" ")
+        if message[0] == "state":
+            player.state = message[1]
+        elif message[0] == "mode":
+            player.mode = message[1]
+        elif message[0] == "brightness":
+            brightness = float(message[1]) / 255.0
+            player.brightness = float(brightness)
+        elif message[0] == "fps":
+            player.fps = int(message[1])
+        elif message[0] == "current_media":
+            player.current_media = message[1]
+        else:
+            logging.error(f"Unknown message from Player: {message}")
 
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
 
 #####################################################
 # API
@@ -126,23 +145,12 @@ async def set_state():
             logging.error("Error: state post request is None")
             return jsonify({"error": "State is None"}), 400
 
-        reply = await send_message_to_player(state)
-        #  if reply is None:
-        #      app.logger.error(f"Error POST STATE response: {reply}")
-        #      return jsonify({"error": "An error occurred while communicating with the player"}), 500
-
-        app.logger.debug(f" POST STATE response: {reply}")
-        return jsonify({"success": True, "reply": reply})
+        await send_message_to_player(state)
+        return jsonify({"success": True, "reply": "OK"})
 
     if request.method == "GET":
-        logging.debug('Received a GET STATE request')
-        #  state = "playing"
-        state = await send_message_to_player("get_state")
-        #  #  if state is None:
-        #  #      app.logger.error(f"Error POST state response is NONE")
-        #  #      return jsonify({"error": "An error occurred while communicating with the player"}), 500
-        app.logger.debug(f" GET STATE from player response: {state}")
-        return jsonify({"success": True, "state": state})
+        app.logger.debug(f" GET STATE from player: {player.state}")
+        return jsonify({"success": True, "state": player.state})
 
     logging.error("STATE Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
@@ -159,18 +167,12 @@ async def set_mode():
             logging.error("Error: mode is None")
             return jsonify({"error": "mode is None"}), 400
 
-        reply = await send_message_to_player(mode.upper())
-        logging.debug(f"GET MODE Reply from player: {reply}")
-        return jsonify({"success": True, "reply": reply})
+        await send_message_to_player(mode.upper())
+        return jsonify({"success": True, "reply": "OK"})
 
     if request.method == "GET":
-        #  logging.debug('Received a GET request')
-        mode = await send_message_to_player("get_mode")
-        if mode is None:
-            app.logger.error(f"Error POST state response is NONE")
-            return jsonify({"error": "An error occurred while communicating with the player"}), 500
-        app.logger.debug(f" GET state response: {mode}")
-        return jsonify({"success": True, "mode": mode, "reply": mode})
+        app.logger.debug(f" GET state response: {player.mode}")
+        return jsonify({"success": True, "mode": player.mode})
 
     logging.error("MODE Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
@@ -179,19 +181,13 @@ async def set_mode():
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def handle_playlist():
     playlist_path = os.path.join(video_dir, "playlist.json")
+
     if request.method == "GET":
-    #  # Replace this part with static response
-    #      playlist = {
-    #          "playlist": [
-    #              {"name": "Sample Video 1", "filepath": "/path/to/sample1.mp4", "thumbnail": "/path/to/sample1_thumbnail.jpg"},
-    #              {"name": "Sample Video 2", "filepath": "/path/to/sample2.mp4", "thumbnail": "/path/to/sample2_thumbnail.jpg"},
-    #          ],
-    #          "mode": "repeat"
-    #      }
         async with aiofiles.open(playlist_path, "r") as f:
             playlist = json.loads(await f.read())
         logging.debug(f"GET PLAYLIST response: {playlist}")
         return jsonify(playlist)
+
     elif request.method == "POST":
         playlist = await request.get_json()
         async with aiofiles.open(playlist_path, "w") as f:
@@ -211,16 +207,12 @@ async def handle_brightness():
         form_data = await request.form
         brightness = float(form_data.get("brightness"))
         brightness = int(brightness/100.0 * 255.0)
-        reply = await send_message_to_player(f"set_brightness {brightness}")
-        #  logging.debug(f"Brightness from player: {reply}")
-        return jsonify({"success": True, "reply": reply})
+        await send_message_to_player(f"set_brightness {brightness}")
+        return jsonify({"success": True, "reply": "OK"})
 
     if request.method == "GET":
-        #  logging.debug('Received a GET BRIGHTNESS request')
-        brightness = await send_message_to_player("get_brightness")
-        brightness = float(brightness) / 255.0
-        app.logger.debug(f" GET Brightness response: {brightness}")
-        return jsonify({"success": True, "brightness": brightness})
+        app.logger.debug(f" GET Brightness response: {player.brightness}")
+        return jsonify({"success": True, "brightness": player.brightness})
 
     logging.error("BRIGHTNESS Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
@@ -230,15 +222,14 @@ async def handle_brightness():
 async def set_fps():
     if request.method == "GET":
         #  logging.debug('Received a GET FPS request')
-        fps = await send_message_to_player("get_fps")
-        #  logging.debug(f"FPS from player: {fps}")
-        return jsonify({"success": True, "fps": float(fps)})
+        logging.debug(f"FPS from player: {player.fps}")
+        return jsonify({"success": True, "fps": float(player.fps)})
 
     if request.method == "POST":
         form_data = await request.form
         fps = int(float(form_data.get("fps")))
-        reply = await send_message_to_player(f"set_fps {fps}")
-        return jsonify({"success": True, "reply": reply})
+        await send_message_to_player(f"set_fps {fps}")
+        return jsonify({"success": True, "reply": "OK"})
 
     logging.error("FPS Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
@@ -287,7 +278,7 @@ async def handle_videos():
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def get_current_media():
 
-    current_media = await send_message_to_player("get_current_media")
+    current_media = player.current_media
     if current_media is None:
         app.logger.error("Error getting current media response")
         return jsonify({"error": "An error occurred while communicating with the player"}), 500
