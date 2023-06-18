@@ -51,7 +51,8 @@ def get_log_level( level):
     }
     return levels.get(level.upper(), logging.INFO)
 
-config = load_config('config/config.json')
+config_path = 'config/config.json'
+config = load_config(config_path)
 
 video_dir = config['video_dir']
 logging.basicConfig(level=get_log_level(config['debug']['log_level']))
@@ -136,7 +137,7 @@ async def subscribe_to_player():
         if time.time() - last_change_at > 60.0 and unsaved_changes:
             config['brightness_level'] = player.brightness
             config['fps'] = player.fps
-            save_config(config, 'config/config.json')
+            save_config(config, config_path)
             unsaved_changes = False
         await asyncio.sleep(0.05)
 
