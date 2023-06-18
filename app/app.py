@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import zmq
 import zmq.asyncio
 from queue import Queue
@@ -35,6 +36,10 @@ def load_config(config_file):
     with open(config_file, 'r') as f:
         config = json.load(f)
     return config
+
+def save_config(config, config_file):
+    with open(config_file, 'w') as f:
+        json.dump(config, f, indent=4)
 
 def get_log_level( level):
     levels = {
@@ -102,6 +107,8 @@ async def send_message_to_player(message):
         return -1
 
 async def subscribe_to_player():
+    last_change_at = time.time()
+    unsaved_changes = False
     while True:
         message = await sub_socket.recv_string()
         logging.debug(f"Received from Player: {message}")
@@ -115,14 +122,27 @@ async def subscribe_to_player():
         elif message[0] == "brightness":
             brightness = float(message[1]) / 255.0
             player.brightness = float(brightness)
+            last_change_at = time.time()
+            unsaved_changes = True
         elif message[0] == "fps":
             player.fps = int(message[1])
+            last_change_at = time.time()
+            unsaved_changes = True
         elif message[0] == "current_media":
             player.current_media = message[1]
         else:
             logging.error(f"Unknown message from Player: {message}")
 
+        if time.time() - last_change_at > 60.0 and unsaved_changes:
+            config['brightness_level'] = player.brightness
+            config['fps'] = player.fps
+            save_config(config, 'config/config.json')
+            unsaved_changes = False
         await asyncio.sleep(0.05)
+
+        
+            
+
 
 #####################################################
 # API
