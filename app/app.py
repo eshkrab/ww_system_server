@@ -291,8 +291,9 @@ async def handle_brightness():
         return jsonify({"success": True, "reply": "OK"})
 
     if request.method == "GET":
-        app.logger.debug(f" GET Brightness response: {player.brightness}")
-        return jsonify({"success": True, "brightness": player.brightness})
+        brightness = player.brightness / 255.0
+        app.logger.debug(f" GET Brightness response: {brightness}")
+        return jsonify({"success": True, "brightness": brightness})
 
     logging.error("BRIGHTNESS Error: Invalid request method")
     return jsonify({"error": "Invalid request method"}), 405
