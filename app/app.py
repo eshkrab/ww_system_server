@@ -211,7 +211,7 @@ async def startup():
     zmq_lock = asyncio.Lock()
 
     asyncio.create_task(subscribe_to_player()) 
-    asyncio.create_task(monitor_socket()) 
+    #  asyncio.create_task(monitor_socket())
     logging.debug("Subscribed to player")
 
 @app.route("/api/state", methods=["GET", "POST"])
