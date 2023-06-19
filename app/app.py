@@ -189,7 +189,7 @@ async def subscribe_to_player():
             save_config(config, config_path)
             unsaved_changes = False
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
 
         
             
