@@ -200,8 +200,6 @@ async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
-
-
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def set_state():
@@ -383,6 +381,7 @@ async def stream():
 async def subscribe():
     await asyncio.create_task(subscribe_to_player())
     await asyncio.create_task(monitor_socket())
+    logging.debug("Subscribed to player")
 
 if __name__ == '__main__':
     asyncio.ensure_future(subscribe())
