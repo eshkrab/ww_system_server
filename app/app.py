@@ -32,6 +32,9 @@ app = Quart(__name__)
 #  app = cors(app, allow_origin="*")
 app = cors(app, allow_origin="*", allow_headers="*", allow_methods="*")
 
+############################
+# CONFIG
+############################
 def load_config(config_file):
     with open(config_file, 'r') as f:
         config = json.load(f)
@@ -58,7 +61,7 @@ video_dir = config['video_dir']
 logging.basicConfig(level=get_log_level(config['debug']['log_level']))
 
 ############################
-# Player
+# PLAYER
 ############################
 player = Player(brightness=config['brightness_level'], fps=config['fps'])
 
@@ -99,6 +102,42 @@ sub_socket = ctx.socket(zmq.SUB)
 sub_socket.connect(f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")  
 sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
 
+def reset_socket(sub_socket):
+    logging.debug("Resetting socket")
+    # close the current socket
+    sub_socket.close()
+    # create a new socket
+    new_sock = ctx.socket(zmq.SUB)
+    logging.debug(f"Subscribing to tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
+
+    # connect the new socket
+    try:
+        logging.debug(f"OPENING UP SOCKET AGAIN to tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
+        new_sock.connect(f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")  
+        new_sock.setsockopt_string(zmq.SUBSCRIBE, "")
+    except zmq.ZMQError as zmq_error:
+        logging.error(f"Subscribing to tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
+        logging.error(f"ZMQ Error occurred during socket reset: {str(zmq_error)}")
+    return new_sock
+
+LAST_MSG_TIME = time.time()
+
+async def monitor_socket():
+    #monitor sub_socket and if it's been too long since LAST_MSG_TIME, reset the socket
+    global sub_socket
+    global LAST_MSG_TIME
+    logging.debug("Monitoring socket")
+    while True:
+
+        logging.debug(f"Time since last message: {time.time() - LAST_MSG_TIME}")
+        # Check if it's been 1 minute since last message received
+        if time.time() - LAST_MSG_TIME > 10:
+            logging.debug("Resetting socket")
+            sub_socket = reset_socket(sub_socket)
+            LAST_MSG_TIME = time.time()
+
+        await asyncio.sleep(1)
+
 async def send_message_to_player(message):
     try:
         logging.debug(f"Publishing message: {message}")
@@ -108,10 +147,16 @@ async def send_message_to_player(message):
         return -1
 
 async def subscribe_to_player():
+    global sub_socket
+    global LAST_MSG_TIME
+
+    # monitor unsaved changes
     last_change_at = time.time()
     unsaved_changes = False
+
     while True:
         message = await sub_socket.recv_string()
+        LAST_MSG_TIME = time.time()
         logging.debug(f"Received from Player: {message}")
 
         # Process the received message
@@ -139,7 +184,8 @@ async def subscribe_to_player():
             config['fps'] = player.fps
             save_config(config, config_path)
             unsaved_changes = False
-        await asyncio.sleep(0.05)
+
+        await asyncio.sleep(1)
 
         
             
