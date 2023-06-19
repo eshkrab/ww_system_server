@@ -388,7 +388,8 @@ async def subscribe():
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(subscribe())
+    loop.create_task(subscribe_to_player())
+    loop.create_task(monitor_socket())
     # ZMQ socket
     logging.debug("Subscribed to player")
 
