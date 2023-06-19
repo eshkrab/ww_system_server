@@ -391,10 +391,6 @@ async def stream():
             await websocket.send(data)
             await asyncio.sleep(0.1)
 
-#  async def subscribe():
-#      await asyncio.create_task(subscribe_to_player())
-#      await asyncio.create_task(monitor_socket())
-#      logging.debug("Subscribed to player")
 
 if __name__ == '__main__':
     #  loop = asyncio.get_event_loop()
