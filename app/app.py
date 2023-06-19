@@ -200,6 +200,10 @@ async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
+    await asyncio.create_task(subscribe_to_player())
+    await asyncio.create_task(monitor_socket())
+
+
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def set_state():
