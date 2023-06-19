@@ -384,6 +384,11 @@ async def subscribe():
     logging.debug("Subscribed to player")
 
 if __name__ == '__main__':
-    asyncio.ensure_future(subscribe())
+    #  asyncio.ensure_future(subscribe())
+    # ZMQ socket
+    monitor_task = asyncio.create_task(monitor_socket())
+    subscribe_task = asyncio.create_task(subscribe_to_player())
+    logging.debug("Subscribed to player")
+
     app.run(host = f"{config['rest_api']['ip']}", port = int(config['rest_api']['port']))
 
