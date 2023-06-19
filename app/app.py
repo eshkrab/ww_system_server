@@ -200,8 +200,6 @@ async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
-    await asyncio.create_task(subscribe_to_player())
-    await asyncio.create_task(monitor_socket())
 
 
 @app.route("/api/state", methods=["GET", "POST"])
@@ -382,6 +380,11 @@ async def stream():
             await websocket.send(data)
             await asyncio.sleep(0.1)
 
+async def subscribe():
+    await asyncio.create_task(subscribe_to_player())
+    await asyncio.create_task(monitor_socket())
+
 if __name__ == '__main__':
+    app.create_task(subscribe())
     app.run(host = f"{config['rest_api']['ip']}", port = int(config['rest_api']['port']))
 
