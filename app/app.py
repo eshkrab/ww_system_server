@@ -127,6 +127,7 @@ async def monitor_socket():
     global sub_socket
     global LAST_MSG_TIME
     logging.debug("Monitoring socket")
+
     while True:
 
         logging.debug(f"Time since last message: {time.time() - LAST_MSG_TIME}")
@@ -202,6 +203,10 @@ async def subscribe_to_player():
 async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
+
+    asyncio.create_task(subscribe_to_player()) 
+    asyncio.create_task(monitor_socket()) 
+    logging.debug("Subscribed to player")
 
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
@@ -387,11 +392,12 @@ async def subscribe():
     logging.debug("Subscribed to player")
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.create_task(subscribe_to_player())
-    loop.create_task(monitor_socket())
-    # ZMQ socket
-    logging.debug("Subscribed to player")
+    #  loop = asyncio.get_event_loop()
+    #  loop.create_task(subscribe_to_player())
+    #  loop.create_task(monitor_socket())
+
+    #  # ZMQ socket
+    #  logging.debug("Subscribed to player")
 
     app.run(host = f"{config['rest_api']['ip']}", port = int(config['rest_api']['port']))
 
