@@ -57,8 +57,9 @@ def get_log_level( level):
 config_path = 'config/config.json'
 config = load_config(config_path)
 
-video_dir = config['video_dir']
 logging.basicConfig(level=get_log_level(config['debug']['log_level']))
+
+video_dir = config['video_dir']
 
 ############################
 # PLAYER
@@ -164,10 +165,8 @@ async def subscribe_to_player():
     logging.debug("SUBSCRIBED to player")
 
     while True:
-        logging.debug("Waiting for message from player")
         message = await sub_socket.recv_string()
         LAST_MSG_TIME = time.time()
-        logging.debug(f"Received from Player: {message}")
 
         # Process the received message
         message = message.split(" ")
@@ -392,10 +391,10 @@ async def stream():
             await websocket.send(data)
             await asyncio.sleep(0.1)
 
-async def subscribe():
-    await asyncio.create_task(subscribe_to_player())
-    await asyncio.create_task(monitor_socket())
-    logging.debug("Subscribed to player")
+#  async def subscribe():
+#      await asyncio.create_task(subscribe_to_player())
+#      await asyncio.create_task(monitor_socket())
+#      logging.debug("Subscribed to player")
 
 if __name__ == '__main__':
     #  loop = asyncio.get_event_loop()
