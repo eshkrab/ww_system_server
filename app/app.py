@@ -154,7 +154,10 @@ async def subscribe_to_player():
     last_change_at = time.time()
     unsaved_changes = False
 
+    logging.debug("SUBSCRIBED to player")
+
     while True:
+        logging.debug("Waiting for message from player")
         message = await sub_socket.recv_string()
         LAST_MSG_TIME = time.time()
         logging.debug(f"Received from Player: {message}")
