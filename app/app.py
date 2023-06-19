@@ -385,6 +385,6 @@ async def subscribe():
     await asyncio.create_task(monitor_socket())
 
 if __name__ == '__main__':
-    app.create_task(subscribe())
+    asyncio.ensure_future(subscribe())
     app.run(host = f"{config['rest_api']['ip']}", port = int(config['rest_api']['port']))
 
