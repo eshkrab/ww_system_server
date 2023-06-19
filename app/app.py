@@ -130,12 +130,18 @@ async def monitor_socket():
 
     while True:
 
-        logging.debug(f"Time since last message: {time.time() - LAST_MSG_TIME}")
+        #  logging.debug(f"Time since last message: {time.time() - LAST_MSG_TIME}")
         # Check if it's been 1 minute since last message received
         if time.time() - LAST_MSG_TIME > 10:
             logging.debug("Resetting socket")
-            sub_socket = reset_socket(sub_socket)
-            LAST_MSG_TIME = time.time()
+            fut = asyncio.ensure_future(sub_socket.recv())
+            try:
+                resp = await asyncio.wait_for(fut, timeout=0.5)  # Close the previous socket only after a short time-out
+                LAST_MSG_TIME = time.time()
+                logging.debug("New message received, not resetting the socket!")
+            except asyncio.TimeoutError:
+                sub_socket = reset_socket(sub_socket)
+                LAST_MSG_TIME = time.time()
 
         await asyncio.sleep(1)
 
