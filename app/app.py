@@ -108,12 +108,34 @@ async def send_message_to_player(message):
         await pub_socket.send_string(message)
     except zmq.ZMQError as e:
         logging.error(f"ZMQError while publishing message: {e}")
+
         return -1
+
+async def subscribe_to_messages( ip_connect, port, process_message):
+    logging.info("Started listening to messages")
+
+    ctx = zmq.asyncio.Context.instance()
+    sub_sock = ctx.socket(zmq.SUB)
+    sub_sock.connect(f"tcp://{ip_connect}:{port}")
+    sub_sock.setsockopt_string(zmq.SUBSCRIBE, "")
+    logging.debug("socket port: "+ str(sub_sock.getsockopt(zmq.LAST_ENDPOINT)))
+
+    try:
+        while True:
+            logging.debug("Waiting for message")
+            message = await sub_sock.recv_string()
+            logging.debug("Received message: " + message)
+            process_message(message)
+            await asyncio.sleep(0.1)
+
+    finally:
+        sub_sock.setsockopt(zmq.LINGER, 0)
+        sub_sock.close()
 
 last_change_at  = time.time()
 unsaved_changes = False
 
-async def process_message(message):
+def process_message(message):
     # monitor unsaved changes
     global last_change_at
     global unsaved_changes
@@ -146,7 +168,6 @@ async def process_message(message):
         unsaved_changes = False
         logging.info("Saved changes to config file")
 
-    await asyncio.sleep(0.1)
 
 
 
@@ -155,9 +176,7 @@ async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
-    await socket_connect(sub_socket, config['zmq']['ip_connect'],config['zmq']['port_player_pub'])
-
-    asyncio.create_task(listen_to_messages(sub_socket, process_message)) 
+    asyncio.create_task(subscribe_to_messages( config['zmq']['ip_connect'],  config['zmq']['port_player_pub'], process_message)) 
     logging.info("Started listening to messages from Player")
 
 #####################################################
