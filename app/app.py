@@ -142,8 +142,8 @@ def process_message(message):
     # Process the received message
     message = message.split(" ")
     if message[0] == "state":
+        logging.info(f"Player state changed to {message}")
         player.state = message[1]
-        logging.info(f"Player state changed to {player.state}")
     elif message[0] == "mode":
         player.mode = message[1]
     elif message[0] == "brightness":
