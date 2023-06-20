@@ -153,7 +153,7 @@ async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
-    await socket_connect_backoff(sub_socket, sub_socket.connect, f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
+    await socket_connect_backoff(sub_socket, config['zmq']['ip_connect'],config['zmq']['port_player_pub'])
 
     asyncio.create_task(listen_to_messages(sub_socket, process_message)) 
     logging.info("Started listening to messages from Player")
