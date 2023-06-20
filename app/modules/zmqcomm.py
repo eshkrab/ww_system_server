@@ -12,6 +12,7 @@ async def socket_connect_backoff(sub_socket, ip_connect, port):
     max_delay = 30.0
     while True:
         try:
+            logging.info(f"Connecting to {ip_connect}:{port}")
             sub_socket.connect(f"tcp://{ip_connect}:{port}")
             sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
             break
