@@ -12,6 +12,7 @@ from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 from moviepy.editor import VideoFileClip
 import hashlib
 
+from modules.zmqcomm import listen_to_messages, socket_connect_backoff
 
 from werkzeug.utils import secure_filename
 
@@ -100,49 +101,6 @@ pub_socket.bind(f"tcp://{config['zmq']['ip_bind']}:{config['zmq']['port_server_p
 
 # Subscribe to the player app
 sub_socket = ctx.socket(zmq.SUB)
-sub_socket.connect(f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")  
-sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
-
-def reset_socket(sub_socket):
-    logging.debug("Resetting socket")
-    # close the current socket
-    sub_socket.close()
-    # create a new socket
-    new_sock = ctx.socket(zmq.SUB)
-    logging.debug(f"Subscribing to tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
-
-    # connect the new socket
-    try:
-        new_sock.connect(f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")  
-        new_sock.setsockopt_string(zmq.SUBSCRIBE, "")
-    except zmq.ZMQError as zmq_error:
-        logging.error(f"ZMQ Error occurred during socket reset: {str(zmq_error)}")
-    return new_sock
-
-LAST_MSG_TIME = time.time()
-
-async def monitor_socket():
-    #monitor sub_socket and if it's been too long since LAST_MSG_TIME, reset the socket
-    global sub_socket
-    global LAST_MSG_TIME
-    logging.info("Monitoring socket")
-
-    while True:
-
-        #  logging.debug(f"Time since last message: {time.time() - LAST_MSG_TIME}")
-        # Check if it's been 1 minute since last message received
-        if time.time() - LAST_MSG_TIME > 10:
-            logging.debug("Resetting socket")
-            fut = asyncio.ensure_future(sub_socket.recv())
-            try:
-                resp = await asyncio.wait_for(fut, timeout=0.5)  # Close the previous socket only after a short time-out
-                LAST_MSG_TIME = time.time()
-                logging.debug("New message received, not resetting the socket!")
-            except asyncio.TimeoutError:
-                sub_socket = reset_socket(sub_socket)
-                LAST_MSG_TIME = time.time()
-
-        await asyncio.sleep(1)
 
 async def send_message_to_player(message):
     try:
@@ -152,64 +110,58 @@ async def send_message_to_player(message):
         logging.error(f"ZMQError while publishing message: {e}")
         return -1
 
-async def subscribe_to_player():
-    global sub_socket
-    global LAST_MSG_TIME
+last_change_at  = time.time()
+unsaved_changes = False
 
+async def process_message(message):
     # monitor unsaved changes
-    last_change_at = time.time()
-    unsaved_changes = False
+    global last_change_at
+    global unsaved_changes
 
-    logging.info("Subscribed to player")
+    # Process the received message
+    message = message.split(" ")
+    if message[0] == "state":
+        player.state = message[1]
+    elif message[0] == "mode":
+        player.mode = message[1]
+    elif message[0] == "brightness":
+        brightness = float(message[1]) / 255.0
+        player.brightness = float(brightness)
+        last_change_at = time.time()
+        unsaved_changes = True
+    elif message[0] == "fps":
+        player.fps = int(message[1])
+        last_change_at = time.time()
+        unsaved_changes = True
+    elif message[0] == "current_media":
+        player.current_media = message[1]
+    else:
+        logging.error(f"Unknown message from Player: {message}")
 
-    while True:
-        message = await sub_socket.recv_string()
-        LAST_MSG_TIME = time.time()
-        logging.debug(f"Received message: {message}")
+    if time.time() - last_change_at > 60.0 and unsaved_changes:
+        config['brightness_level'] = player.brightness
+        config['fps'] = player.fps
+        save_config(config, config_path)
+        unsaved_changes = False
 
-        # Process the received message
-        message = message.split(" ")
-        if message[0] == "state":
-            player.state = message[1]
-        elif message[0] == "mode":
-            player.mode = message[1]
-        elif message[0] == "brightness":
-            brightness = float(message[1]) / 255.0
-            player.brightness = float(brightness)
-            last_change_at = time.time()
-            unsaved_changes = True
-        elif message[0] == "fps":
-            player.fps = int(message[1])
-            last_change_at = time.time()
-            unsaved_changes = True
-        elif message[0] == "current_media":
-            player.current_media = message[1]
-        else:
-            logging.error(f"Unknown message from Player: {message}")
-
-        if time.time() - last_change_at > 60.0 and unsaved_changes:
-            config['brightness_level'] = player.brightness
-            config['fps'] = player.fps
-            save_config(config, config_path)
-            unsaved_changes = False
-
-        await asyncio.sleep(0.1)
-
-        
-            
+    await asyncio.sleep(0.1)
 
 
-#####################################################
-# API
-#####################################################
 
 @app.before_serving
 async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
-    asyncio.create_task(subscribe_to_player()) 
-    #  asyncio.create_task(monitor_socket())
+    asyncio.run(socket_connect_backoff(sub_socket, sub_socket.connect, f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}"))
+
+    asyncio.create_task(listen_to_messages(sub_socket, process_message)) 
+    logging.info("Started listening to messages from Player")
+
+#####################################################
+# API
+#####################################################
+
 
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
