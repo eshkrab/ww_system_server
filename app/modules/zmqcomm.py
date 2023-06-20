@@ -8,19 +8,21 @@ LAST_MSG_TIME = time.time()
 
 
 async def socket_connect_backoff(sub_socket, ip_connect, port):
-    delay = 1.0
-    max_delay = 30.0
-    while True:
-        try:
-            logging.info(f"Connecting to {ip_connect}:{port}")
-            sub_socket.connect(f"tcp://{ip_connect}:{port}")
-            sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
-            break
-        except zmq.ZMQError:
-            logging.error("Unable to establish connection, retrying in {} seconds...".format(delay))
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, max_delay)
-
+    sub_socket.connect(f"tcp://{ip_connect}:{port}")
+    sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
+    #  delay = 1.0
+    #  max_delay = 30.0
+    #  while True:
+    #      try:
+    #          logging.info(f"Connecting to {ip_connect}:{port}")
+    #          sub_socket.connect(f"tcp://{ip_connect}:{port}")
+    #          sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
+    #          break
+    #      except zmq.ZMQError:
+    #          logging.error("Unable to establish connection, retrying in {} seconds...".format(delay))
+    #          await asyncio.sleep(delay)
+    #          delay = min(delay * 2, max_delay)
+    #
 
 
 async def listen_to_messages(sub_socket, process_message):
