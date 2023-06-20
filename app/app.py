@@ -113,11 +113,9 @@ def reset_socket(sub_socket):
 
     # connect the new socket
     try:
-        logging.debug(f"OPENING UP SOCKET AGAIN to tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
         new_sock.connect(f"tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")  
         new_sock.setsockopt_string(zmq.SUBSCRIBE, "")
     except zmq.ZMQError as zmq_error:
-        logging.error(f"Subscribing to tcp://{config['zmq']['ip_connect']}:{config['zmq']['port_player_pub']}")
         logging.error(f"ZMQ Error occurred during socket reset: {str(zmq_error)}")
     return new_sock
 
@@ -127,7 +125,7 @@ async def monitor_socket():
     #monitor sub_socket and if it's been too long since LAST_MSG_TIME, reset the socket
     global sub_socket
     global LAST_MSG_TIME
-    logging.debug("Monitoring socket")
+    logging.info("Monitoring socket")
 
     while True:
 
@@ -162,11 +160,12 @@ async def subscribe_to_player():
     last_change_at = time.time()
     unsaved_changes = False
 
-    logging.debug("SUBSCRIBED to player")
+    logging.info("Subscribed to player")
 
     while True:
         message = await sub_socket.recv_string()
         LAST_MSG_TIME = time.time()
+        logging.debug(f"Received message: {message}")
 
         # Process the received message
         message = message.split(" ")
@@ -210,8 +209,7 @@ async def startup():
     zmq_lock = asyncio.Lock()
 
     asyncio.create_task(subscribe_to_player()) 
-    #  asyncio.create_task(monitor_socket())
-    logging.debug("Subscribed to player")
+    asyncio.create_task(monitor_socket())
 
 @app.route("/api/state", methods=["GET", "POST"])
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
