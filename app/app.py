@@ -141,24 +141,19 @@ def process_message(message):
     # Process the received message
     message = message.split(" ")
     if message[0] == "state":
-        logging.debug(f"Received message: {message}")  
         player.state = message[1]
     elif message[0] == "mode":
-        logging.debug(f"Received message: {message}")  
         player.mode = message[1]
     elif message[0] == "brightness":
-        logging.debug(f"Received message: {message}")  
         brightness = float(message[1]) / 255.0
         player.brightness = float(brightness)
         last_change_at = time.time()
         unsaved_changes = True
     elif message[0] == "fps":
-        logging.debug(f"Received message: {message}")  
         player.fps = int(message[1])
         last_change_at = time.time()
         unsaved_changes = True
     elif message[0] == "current_media":
-        logging.debug(f"Received message: {message}")  
         player.current_media = message[1]
     else:
         logging.error(f"Unknown message from Player: {message}")
