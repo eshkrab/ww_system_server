@@ -137,11 +137,13 @@ def process_message(message):
     # monitor unsaved changes
     global last_change_at
     global unsaved_changes
+    global player
 
     # Process the received message
     message = message.split(" ")
     if message[0] == "state":
         player.state = message[1]
+        logging.info(f"Player state changed to {player.state}")
     elif message[0] == "mode":
         player.mode = message[1]
     elif message[0] == "brightness":
