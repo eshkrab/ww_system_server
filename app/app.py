@@ -12,7 +12,7 @@ from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 from moviepy.editor import VideoFileClip
 import hashlib
 
-from modules.zmqcomm import listen_to_messages, socket_connect_backoff
+from modules.zmqcomm import listen_to_messages, socket_connect
 
 from werkzeug.utils import secure_filename
 
@@ -155,7 +155,7 @@ async def startup():
     global zmq_lock
     zmq_lock = asyncio.Lock()
 
-    await socket_connect_backoff(sub_socket, config['zmq']['ip_connect'],config['zmq']['port_player_pub'])
+    await socket_connect(sub_socket, config['zmq']['ip_connect'],config['zmq']['port_player_pub'])
 
     asyncio.create_task(listen_to_messages(sub_socket, process_message)) 
     logging.info("Started listening to messages from Player")
