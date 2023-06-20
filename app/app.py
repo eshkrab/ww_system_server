@@ -117,6 +117,7 @@ async def process_message(message):
     # monitor unsaved changes
     global last_change_at
     global unsaved_changes
+    logging.debug(f"Received message: {message}")  
 
     # Process the received message
     message = message.split(" ")
@@ -143,6 +144,7 @@ async def process_message(message):
         config['fps'] = player.fps
         save_config(config, config_path)
         unsaved_changes = False
+        logging.info("Saved changes to config file")
 
     await asyncio.sleep(0.1)
 
