@@ -152,10 +152,8 @@ def process_message(message):
             logging.info(f"Player mode changed from {player.mode} to {new_mode}")
             player.mode = new_mode
     elif message[0] == "brightness":
-        brightness = float(message[1])
-        logging.debug(f"brightness changed from {message[1]} to {brightness}")
+        brightness = float(message[1]) / 255.0
         if brightness != player.brightness:
-            logging.info(f"Player brightness changed from {player.brightness} to {brightness}")
             player.brightness = float(brightness)
             last_change_at = time.time()
             unsaved_changes = True
@@ -178,6 +176,8 @@ def process_message(message):
         save_config(config, config_path)
         unsaved_changes = False
         logging.info("Saved changes to config file")
+        logging.info(f"Player brightness: {player.brightness}")
+        logging.info(f"Player fps: {player.fps}")
 
 
 
