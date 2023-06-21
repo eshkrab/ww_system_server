@@ -21,6 +21,8 @@ import asyncio
 
 import logging
 
+import re
+
 class Player:
     def __init__(self, brightness=250.0, fps=30, state="stopped", mode="repeat", current_media=None):
         self.state = state
@@ -62,6 +64,7 @@ logging.basicConfig(level=get_log_level(config['debug']['log_level']))
 
 video_dir = config['video_dir']
 
+
 ############################
 # PLAYER
 ############################
@@ -101,6 +104,9 @@ pub_socket.bind(f"tcp://{config['zmq']['ip_bind']}:{config['zmq']['port_server_p
 
 # Subscribe to the player app
 sub_socket = ctx.socket(zmq.SUB)
+synk_sub_socket = ctx.socket(zmq.SUB)
+
+nodes = {} 
 
 async def send_message_to_player(message):
     try:
@@ -132,6 +138,29 @@ async def subscribe_to_messages( ip_connect, port, process_message):
 
 last_change_at  = time.time()
 unsaved_changes = False
+
+
+def process_synker(message):
+    global nodes
+
+    # Extract the list of nodes from the message string
+    node_list_str = message.split("nodes: ")[1]
+
+    # Convert the string back into a list
+    node_list = eval(node_list_str)
+
+    # Empty the nodes list
+    nodes.clear()
+
+    # Extract the hostname and IP from each node string and add to the nodes list
+    for node in node_list:
+        match = re.match(r"(.*) \((.*)\)", node)
+        if match:
+            hostname, ip = match.groups()
+            nodes[ip] = {"hostname": hostname}
+
+    logging.debug(f"Nodes: {nodes}")
+
 
 def process_message(message):
     # monitor unsaved changes
@@ -188,6 +217,7 @@ async def startup():
     zmq_lock = asyncio.Lock()
 
     asyncio.create_task(subscribe_to_messages( config['zmq']['ip_connect'],  config['zmq']['port_player_pub'], process_message)) 
+    asyncio.create_task(subscribe_to_messages( config['zmq']['ip_connect'],  config['zmq']['port_synker_pub'], process_synker)) 
     logging.info("Started listening to messages from Player")
 
 #####################################################
