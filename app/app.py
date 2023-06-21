@@ -152,7 +152,7 @@ def process_message(message):
             logging.info(f"Player mode changed from {player.mode} to {new_mode}")
             player.mode = new_mode
     elif message[0] == "brightness":
-        brightness = float(message[1]) / 255.0
+        brightness = float(message[1]) #/ 255.0
         if brightness != player.brightness:
             player.brightness = float(brightness)
             last_change_at = time.time()
