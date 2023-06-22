@@ -149,17 +149,25 @@ def process_synker(message):
     # Convert the string back into a list
     node_list = eval(node_list_str)
 
-    # Empty the nodes list
-    nodes.clear()
+    # Create a dictionary to store the new nodes info
+    new_nodes = {}
 
-    # Extract the hostname and IP from each node string and add to the nodes list
+    # Extract the hostname and IP from each node string and add to the new_nodes dictionary
     for node in node_list:
         match = re.match(r"(.*) \((.*)\)", node)
         if match:
             hostname, ip = match.groups()
-            nodes[ip] = {"hostname": hostname}
+            new_nodes[ip] = {"hostname": hostname}
 
-    #  logging.debug(f"Nodes: {nodes}")
+    # Compare the new_nodes dictionary with the existing nodes dictionary
+    if new_nodes != nodes:
+
+        # Update only if there are differences
+        nodes.clear()
+        nodes.update(new_nodes)
+
+        # Uncomment the following line if you want to log/debug
+        logging.debug(f"New Nodes: {nodes}")
 
 
 def process_message(message):
