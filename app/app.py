@@ -159,7 +159,7 @@ def process_synker(message):
             hostname, ip = match.groups()
             nodes[ip] = {"hostname": hostname}
 
-    logging.debug(f"Nodes: {nodes}")
+    #  logging.debug(f"Nodes: {nodes}")
 
 
 def process_message(message):
