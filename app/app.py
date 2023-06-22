@@ -1,4 +1,5 @@
 import os
+import ast
 import json
 import time
 import zmq
@@ -139,15 +140,31 @@ async def subscribe_to_messages( ip_connect, port, process_message):
 last_change_at  = time.time()
 unsaved_changes = False
 
+def update_nodes_if_different(new_nodes):
+    global nodes
+
+    if new_nodes != nodes:
+        nodes.clear()
+        nodes.update(new_nodes)
+        # Uncomment the following line if you want to log/debug
+        logging.debug(f"New Nodes: {new_nodes}")
+
 
 def process_synker(message):
+    """
+    Process the incoming message from synker, update the nodes if there
+    are differences in the received list and the existing one.
+    
+    :param message: Message containing the nodes information
+    :type message: str
+    """
     global nodes
 
     # Extract the list of nodes from the message string
     node_list_str = message.split("nodes: ")[1]
 
-    # Convert the string back into a list
-    node_list = eval(node_list_str)
+    # Convert the string back into a list using safe parsing
+    node_list = ast.literal_eval(node_list_str)
 
     # Create a dictionary to store the new nodes info
     new_nodes = {}
@@ -159,15 +176,9 @@ def process_synker(message):
             hostname, ip = match.groups()
             new_nodes[ip] = {"hostname": hostname}
 
-    # Compare the new_nodes dictionary with the existing nodes dictionary
-    if new_nodes != nodes:
+    # Call update_nodes_if_different function to compare and update the nodes dictionary
+    update_nodes_if_different(new_nodes)
 
-        # Update only if there are differences
-        nodes.clear()
-        nodes.update(new_nodes)
-
-        # Uncomment the following line if you want to log/debug
-        logging.debug(f"New Nodes: {nodes}")
 
 
 def process_message(message):
