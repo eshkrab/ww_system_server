@@ -174,7 +174,7 @@ def process_synker(message):
         match = re.match(r"(.*) \((.*)\)", node)
         if match:
             hostname, ip = match.groups()
-            new_nodes[ip] = {"hostname": hostname}
+            new_nodes[ip] = {"hostname": hostname + ".local"}
 
     # Call update_nodes_if_different function to compare and update the nodes dictionary
     update_nodes_if_different(new_nodes)
