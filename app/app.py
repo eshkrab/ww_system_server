@@ -404,6 +404,7 @@ async def get_current_media():
         logging.debug(f"GET CURRENT MEDIA response: {video_file}")
         return jsonify(video_file)
 
+
 @app.route("/thumbnails/<filename>")
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
 async def serve_thumbnail(filename):
@@ -411,6 +412,18 @@ async def serve_thumbnail(filename):
     thumbnail_path = generate_thumbnail_path(filename)
     logging.debug(f"Thumbnail path: {thumbnail_path}")
     return await send_file(thumbnail_path)
+
+
+@app.route("/api/nodes", methods=["GET"])
+@route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
+async def get_nodes_list():
+    global nodes
+    if request.method == "GET":
+        logging.debug("GET NODES response: {nodes}")
+        return jsonify(nodes)
+    logging.error("NODES Error: Invalid request method")
+    return jsonify({"error": "Invalid request method"}), 405
+
 
 @app.websocket('/stream')
 @route_cors(allow_origin="*", allow_headers="*", allow_methods="*")
